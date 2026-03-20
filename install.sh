@@ -369,7 +369,7 @@ fix_flashinfer_license() {
         for PYPROJECT in $FLASHINFER_DIRS; do
             log_info "Patching $PYPROJECT"
             sed -i 's/^license = "Apache-2.0"$/license = {text = "Apache-2.0"}/' "$PYPROJECT"
-            sed -i '/^license-files = /d' "$PYPROJECT"
+            sed -i '/^license-files[[:space:]]*=/d' "$PYPROJECT"
         done
         log_success "flashinfer-python license field fixed"
         return 0
@@ -405,12 +405,19 @@ build_vllm() {
 
     # Check if build failed due to flashinfer license issue
     if [ $BUILD_STATUS -ne 0 ]; then
-        if grep -q "flashinfer.*license.*must be valid" "$INSTALL_DIR/vllm-build.log"; then
+        if grep -q "flashinfer-python" "$INSTALL_DIR/vllm-build.log" && \
+           grep -Eq "project\.license|license.*must be valid" "$INSTALL_DIR/vllm-build.log"; then
             log_warning "Build failed due to flashinfer-python license issue"
             log_info "Applying flashinfer-python fix and retrying..."
 
             # Fix flashinfer in cache
             fix_flashinfer_license
+
+            FLASHINFER_DIRS=$(find "$HOME/.cache/uv/sdists-v9/pypi/flashinfer-python" -name "pyproject.toml" 2>/dev/null || true)
+            for PYPROJECT in $FLASHINFER_DIRS; do
+                log_info "Verifying patched file: $PYPROJECT"
+                grep -n "^license" "$PYPROJECT" || true
+            done
 
             # Retry build
             log_info "Retrying vLLM build..."
